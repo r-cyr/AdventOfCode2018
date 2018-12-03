@@ -3,16 +3,15 @@ module Main where
 import Data.Monoid ((<>))
 import qualified Data.Set as S
 
-
 decodeInput :: String -> [Integer]
 decodeInput = fmap readNumber . lines
   where
     isPositiveNumber word = head word == '+'
     readNumber word =
       let num =
-            if isPositiveNumber word
-              then tail word
-              else word
+           if isPositiveNumber word 
+             then tail word
+             else word
        in read num
 
 partOne :: [Integer] -> Integer
