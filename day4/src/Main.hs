@@ -10,6 +10,7 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Monoid ((<>))
 
 data Guard = BeginShift { identifier :: Int, time :: LocalTime }
            | FallsAsleep { time :: LocalTime }
@@ -34,33 +35,35 @@ parseGuards input = sortBy (compare `on` time) guards
   where
     guards = either (const []) id . traverse (runParser parseGuard "") $ lines input
 
+minutes :: LocalTime -> Int
+minutes = todMin . localTimeOfDay
+
+minuteRange :: LocalTime -> LocalTime -> [Int]
+minuteRange start end = [minutes start .. (pred . minutes) end]
+
+minutesPerShiftMap :: [Guard] -> [(Int, [Int])]
+minutesPerShiftMap = Map.assocs . foldr (uncurry (Map.insertWith (++))) Map.empty . go 0
+  where
+    go _ (BeginShift id _:xs) = go id xs
+    go id (FallsAsleep st:WakesUp wt:xs) = (id, minuteRange st wt):go id xs
+    go _ _ = []
+
 partOne :: [Guard] -> Int
-partOne guards = fst mostAsleep * mostSleptMinute (snd mostAsleep)
+partOne = ((*) <$> fst <*> mostSleptMinute) . mostAsleep
   where
-    minutesRange = accumulateMinutes guards
-    minutesMap = foldr (\(k, v) acc -> Map.insertWith (++) k v acc) Map.empty minutesRange
-    mostAsleep = maximumBy (compare `on` length . snd) (Map.assocs minutesMap)
-    mostSleptMinute = head . maximumBy (compare `on` length) . group . sort
+    mostAsleep = maximumBy (compare `on` length . snd) . minutesPerShiftMap
+    mostSleptMinute = head . maximumBy (compare `on` length) . group . sort . snd
 
---partTwo :: [Guard] -> Int
-partTwo guards = fst winner * (head . snd) winner
+partTwo :: [Guard] -> Int
+partTwo guards = ((*) <$> fst <*> head . snd) mostFrequentlyAsleepAtSameMin
   where
-    minutesRange = accumulateMinutes guards
-    minutesMap = foldr (\(k, v) acc -> Map.insertWith (++) k v acc) Map.empty minutesRange
-    mostSleptMinuteTuples = fmap (\(id, xs) -> (id, mostSleptMinute xs)) (Map.assocs minutesMap)
+    mostSleptMinuteAggregated = fmap (\(gid, xs) -> (gid, mostSleptMinute xs)) (minutesPerShiftMap guards)
     mostSleptMinute = maximumBy (compare `on` length) . group . sort
-    winner = minimumBy (flip compare `on` length . snd) mostSleptMinuteTuples
-
-accumulateMinutes :: [Guard] -> [(Int, [Int])]
-accumulateMinutes = go 0
-  where
-    go _ (BeginShift id localTime:xs) = go id xs
-    go id (FallsAsleep sleepTime:WakesUp wakeTime:xs) =
-      (id, [(todMin . localTimeOfDay) sleepTime .. (pred . todMin . localTimeOfDay) wakeTime]):go id xs
-    go id [] = []
+    mostFrequentlyAsleepAtSameMin = minimumBy (flip compare `on` length . snd) mostSleptMinuteAggregated
 
 main :: IO ()
 main = do
   guards <- parseGuards <$> readFile "input.txt"
-  print $ partTwo guards
+  print $ "The result of part one is: " <> (show . partOne) guards
+  print $ "The result of part one is: " <> (show . partTwo) guards
 
