@@ -7,11 +7,14 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Monoid ((<>))
 
+caseInsensitiveEqual :: Char -> Char -> Bool
+caseInsensitiveEqual a b = toLower a == toLower b
+
 react :: String -> String
 react xs = if length filtered /= length xs then react filtered else xs
   where
     filtered = go [] xs
-    reacts a b = toLower a == toLower b && a /= b
+    reacts a b = caseInsensitiveEqual a b && a /= b
     myInit [] = []
     myInit xs = init xs
     myLast [] = []
@@ -24,11 +27,11 @@ partOne :: String -> Int
 partOne = length . react
 
 partTwo :: String -> Int
-partTwo xs = minimum mapped
+partTwo xs = Set.findMin
+           . Set.map (length . react . flip withoutUnit xs)
+           $ Set.fromList ['a'..'z']
   where
-    characterSet = Set.toList . Set.fromList $ toLower <$> xs
-    caseInsensitiveEqual a b = toLower a == toLower b
-    mapped = fmap (\x -> length . react $ filter (not . caseInsensitiveEqual x) xs) characterSet
+    withoutUnit x = filter (not . caseInsensitiveEqual x)
 
 main :: IO ()
 main = do
