@@ -11,12 +11,12 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Void
+import qualified Data.Monoid ((<>))
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void String
-
 type Point = (Int, Int)
 type BoardDimensions = (Int, Int, Int, Int)
 
@@ -31,32 +31,35 @@ parsePoints = Set.fromList . either (const []) id . traverse (runParser point ""
   where
     point = (,) <$> number <* ", " <*> number
 
-boardDimensions :: Set Point -> BoardDimensions
-boardDimensions = (,,,)
-    <$> snd . minimumBy (compare `on` snd)
-    <*> fst . maximumBy (compare `on` fst)
-    <*> snd . maximumBy (compare `on` snd)
-    <*> fst . minimumBy (compare `on` fst)
+buildBoardCoordsSet :: Set Point -> Set Point
+buildBoardCoordsSet points = Set.fromList [(x, y) | x <- [l .. l + r - l], y <- [t .. t + b - t]]
+  where
+    (t, r, b, l) = (,,,)
+                <$> snd . minimumBy (compare `on` snd)
+                <*> fst . maximumBy (compare `on` fst)
+                <*> snd . maximumBy (compare `on` snd)
+                <*> fst . minimumBy (compare `on` fst)
+                 $ points
 
-partOne points = succ
-               . maximum
-               . Map.elems
-               . Map.fromListWith (+)
-               . fmap (,1)
-               . Map.elems
-               . generateCoordMap
-               . findAllPossibleCoords
+partOne :: Set Point -> Int
+partOne points = findLargestArea . buildBoardCoordsSet $ points
+  where
+    findLargestArea = maximum . Map.elems . Map.fromListWith (+) . fmap (,1) . catMaybes . Set.foldr (\x acc -> closestPoint x:acc) []
+    closestPoint coord = Map.lookupMin (Set.foldr (\point -> Map.insertWith (++) (manhattan coord point) [point]) Map.empty points)
+                       >>= (\x -> if (== 1) . length . snd $ x then Just . head . snd $ x else Nothing)
+
+partTwo :: Set Point -> Int
+partTwo points = length
+               . filter (< 10000)
+               . fmap totalDistance
+               . Set.toList . buildBoardCoordsSet
                $ points
   where
-    (t, r, b, l) = boardDimensions points 
-    findAllPossibleCoords = Set.difference . Set.fromList $ [(x, y) | x <- [l .. l + r - l], y <- [t .. t + b - t]]
-    generateCoordMap = Map.map (\[x] -> x) . Map.filter ((== 1) . length) . Map.fromSet getClosestPoint
-    getClosestPoint coord = snd . fromJust . Map.lookupMin $ closestMap
-      where
-        closestMap = Set.foldr (\point -> Map.insertWith (++) (manhattan coord point) [point]) Map.empty points
+    totalDistance x = sum $ manhattan x <$> Set.toList points
 
 main :: IO ()
 main = do
   points <- parsePoints <$> readFile "input.txt"
-  print $ partOne points
+  print $ "The result for part one is: " <> (show . partOne) points
+  print $ "The result for part two is: " <> (show . partTwo) points
 
